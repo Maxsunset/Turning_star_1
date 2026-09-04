@@ -100,6 +100,8 @@ typedef enum {
 	Button_Then_Pressed = 2
 } Button_Pressed_Times_type;
 
+typedef void (*Button_Action)(void);
+
 typedef enum {
 	LED_On = 0,
 	LED_Off = 1,
@@ -109,222 +111,142 @@ typedef enum {
 	OLED_On = 0,
 	OLED_Off = 1,
 } OLED_On_or_Off_type;
+
 state_type state = state_Off;
 state_Off_type state_Off_mode = state_Off_already;
 state_On_type state_On_mode = state_On_already;
 mode_type mode = mode_Off;
-Button_Pressed_Times_type Button_Switch_Times = Button_First_Pressed;
-Button_Pressed_Times_type Button_Breath_Times = Button_First_Pressed;
+mode_type displayed_mode = mode_Off;
+
+Button_Pressed_Times_type Button_Switch_Times  = Button_First_Pressed;
+Button_Pressed_Times_type Button_Breath_Times  = Button_First_Pressed;
 Button_Pressed_Times_type Button_Rainbow_Times = Button_First_Pressed;
 Button_Pressed_Times_type Button_Measure_Times = Button_First_Pressed;
 
-static uint32_t triangle (uint32_t phase, uint32_t period, uint32_t max)
-{
+static uint32_t triangle(uint32_t phase, uint32_t period, uint32_t max){
 	uint32_t half = period / 2;
 	uint32_t t = phase % period;
-	
-	if(t < half){
-		return (t * max) / half;
-	} else {
-		return ((period - t) * max) / half;
-	}
+
+	if(t < half){ return (t * max) / half;}
+	else { return ((period - t) * max) / half;}
 }
 
-static void LED_lighted (LED_On_or_Off_type LED_On_or_Off)
-{
-	if (LED_On_or_Off == LED_On){
-		HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_RESET);}
-	else {
-		HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_SET);}
-}
-static void OLED_lighted (OLED_On_or_Off_type OLED_On_or_Off)
-{
-	if (OLED_On_or_Off == OLED_On){
-		ssd1306_set_display(&oled, SSD1306_DISPLAY_ON);}
-	else {
-		ssd1306_set_display(&oled, SSD1306_DISPLAY_OFF);}
-}
-static void RGB_lighted (uint32_t color_r, uint32_t color_g,uint32_t color_b)
-{
-	__HAL_TIM_SET_COMPARE(&htim2,TIM_CHANNEL_2, color_r);
-	__HAL_TIM_SET_COMPARE(&htim2,TIM_CHANNEL_3, color_g);
-	__HAL_TIM_SET_COMPARE(&htim2,TIM_CHANNEL_4, color_b);
+static void LED_lighted(LED_On_or_Off_type LED_On_or_Off){
+	if (LED_On_or_Off == LED_On){ HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_RESET);}
+	else { HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_SET);}
 }
 
-static void Boot_animation (void)
-{
+static void OLED_lighted(OLED_On_or_Off_type OLED_On_or_Off){
+	if (OLED_On_or_Off == OLED_On){ ssd1306_set_display(&oled, SSD1306_DISPLAY_ON);}
+	else { ssd1306_set_display(&oled, SSD1306_DISPLAY_OFF);}
+}
+
+static void RGB_lighted(uint32_t color_r, uint32_t color_g, uint32_t color_b){
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, color_r);
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, color_g);
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, color_b);
+}
+
+static void Boot_animation(void){
 	static uint32_t n1 = 0;
 	while(1){
-		if( n1 / 25 == 0 )
-			RGB_lighted(500,0,0);
-		else if( n1 / 25 == 1 )
-			RGB_lighted(500-20*(n1-25),20*(n1-25),0);
-		else if( n1 / 25 == 2 )
-			RGB_lighted(0, 500, 0);
-		else if( n1 / 25 == 3 )
-			RGB_lighted(0,500-20*(n1-75),20*(n1-75));
-		else if( n1 / 25 == 4 )
-			RGB_lighted(0,0,500);
-		else
-			break;
+		if( n1 / 25 == 0 ){ RGB_lighted(500,0,0);}
+		else if( n1 / 25 == 1 ){ RGB_lighted(500-20*(n1-25),20*(n1-25),0);}
+		else if( n1 / 25 == 2 ){ RGB_lighted(0, 500, 0);}
+		else if( n1 / 25 == 3 ){ RGB_lighted(0,500-20*(n1-75),20*(n1-75));}
+		else if( n1 / 25 == 4 ){ RGB_lighted(0,0,500);}
+		else { break;}
 		HAL_Delay(12);
 		n1 = n1 + 1;}
 }
-static void Button_detector(GPIO_TypeDef *port, uint16_t pin, Button_Pressed_Times_type *times)
-{
-    if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
-    {
-        if (*times == Button_First_Pressed)
-        {
-            *times = Button_Next_Pressed;
-        }
-        else if (*times == Button_Next_Pressed)
-        {
-            if (pin == Button_Switch_Pin)
-            {
-                if (state == state_Off)
-                {
-                    state = state_On;
-                    state_On_mode = state_On_just;
-                }
-                else
-                {
-                    state = state_Off;
-                    state_Off_mode = state_Off_just;
-                }
-            }
-            else if (pin == Button_Breath_Pin){
-                mode = mode_Breath;}
-            else if (pin == Button_Rainbow_Pin){
-                mode = mode_Rainbow;}
-            else if (pin == Button_Measure_Pin){
-                mode = mode_Measure;}
 
-            *times = Button_Then_Pressed;
-        }
-        else
-        {
-            // Button_Then_Pressed: waiting for release
-        }
-    }
-    else
-    {
-        if (*times == Button_Then_Pressed){
-            *times = Button_First_Pressed;}
-        else if (*times == Button_Next_Pressed){
-            // Released during debounce, treat as invalid press
-            *times = Button_First_Pressed;}
-    }
+static void Action_Switch(void){
+	if (state == state_Off){ state = state_On; state_On_mode = state_On_just;}
+	else { state = state_Off; state_Off_mode = state_Off_just;}
 }
 
-static void RGB_Breath (void)
-{
-	r = triangle (n, 75, 999);
+static void Action_Breath(void){ mode = mode_Breath;}
+static void Action_Rainbow(void){ mode = mode_Rainbow;}
+static void Action_Measure(void){ mode = mode_Measure;}
+
+static void Button_detector(GPIO_TypeDef *port, uint16_t pin,
+                            Button_Pressed_Times_type *times, Button_Action action){
+	if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET){
+		if (*times == Button_First_Pressed){ *times = Button_Next_Pressed;}
+		else if (*times == Button_Next_Pressed){
+			if (action != NULL){ action();}
+			*times = Button_Then_Pressed;}
+		else { /* Waiting for release */ }
+	}
+	else {
+		if (*times == Button_Then_Pressed){ *times = Button_First_Pressed;}
+		else if (*times == Button_Next_Pressed){ *times = Button_First_Pressed;}
+	}
+}
+
+static void RGB_Breath(void){
+	r = triangle(n, 75, 999);
 	g = 0;
-	b = triangle (n, 75, 999);
-	RGB_lighted (r,g,b);
+	b = triangle(n, 75, 999);
+	RGB_lighted(r, g, b);
 }
 
-static void RGB_Rainbow (void)
-{
+static void RGB_Rainbow(void){
 	r = triangle(n, 50, 999);
 	g = triangle(n + 70, 75, 999);
 	b = triangle(n + 150, 100, 999);
-	RGB_lighted (r,g,b);
+	RGB_lighted(r, g, b);
 }
 
-static uint32_t Potentiometer_Read (void)
-{
+static uint32_t Potentiometer_Read(void){
 	static uint32_t adc_val = 0;
-	
-	HAL_ADC_Start(&hadc1);	
-	if (HAL_ADC_PollForConversion(&hadc1, 10) ==  HAL_OK)
-		{
-		adc_val = HAL_ADC_GetValue(&hadc1);
-		}
+
+	HAL_ADC_Start(&hadc1);
+	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK){
+		adc_val = HAL_ADC_GetValue(&hadc1);}
 	HAL_ADC_Stop(&hadc1);
-		
+
 	return adc_val;
 }
-static uint32_t RGB_Measure (void)
-{
-	uint32_t Brightness = Potentiometer_Read ();
-	if (Brightness <= 2013)
-	{
+
+static uint32_t RGB_Measure(void){
+	uint32_t Brightness = Potentiometer_Read();
+	if (Brightness <= 2013){
 		r = 999 - (Brightness * 999 / 2013);
 		g = Brightness * 999 / 2013;
-		b = 0;
-	}
-	else
-	{
+		b = 0;}
+	else {
 		r = 0;
 		g = 999 - ((Brightness - 2013) * 999 / 2013);
-		b = (Brightness - 2013) * 999 / 2013;
-	}
-	RGB_lighted (r,g,b);
+		b = (Brightness - 2013) * 999 / 2013;}
+	RGB_lighted(r, g, b);
 	return Brightness;
 }
-	
-int fputc(int ch, FILE *f)
-{
-    uint8_t temp = (uint8_t)ch;
-    HAL_UART_Transmit(&huart1, &temp, 1, 100);
-    return ch;
+
+int fputc(int ch, FILE *f){
+	uint8_t temp = (uint8_t)ch;
+	HAL_UART_Transmit(&huart1, &temp, 1, 100);
+	return ch;
 }
-// Add this function in main.c to send the standard SSD1306 initialization commands
-static void ssd1306_configure(ssd1306_handle_t *handle)
-{
-    // Command sequence: (command, parameter) or single command
-    // You can follow the order below, send commands one by one via ssd1306_write_cmd()
-    // Or use an array plus a loop to send
-
-    // 1. Turn off display, clear internal state
+static void ssd1306_configure(ssd1306_handle_t *handle){
     ssd1306_write_cmd(handle, (uint8_t[]){0xAE}, 1);
-
-    // 2. Set display clock divide
     ssd1306_write_cmd(handle, (uint8_t[]){0xD5, 0x80}, 2);
-
-    // 3. Set multiplex ratio (64 lines)
     ssd1306_write_cmd(handle, (uint8_t[]){0xA8, 0x3F}, 2);
-
-    // 4. Set display offset
     ssd1306_write_cmd(handle, (uint8_t[]){0xD3, 0x00}, 2);
-
-    // 5. Set display start line
     ssd1306_write_cmd(handle, (uint8_t[]){0x40}, 1);
-
-    // 6. Enable charge pump (internal VCC)
     ssd1306_write_cmd(handle, (uint8_t[]){0x8D, 0x14}, 2);
-
-    // 7. Set memory addressing mode to page
     ssd1306_write_cmd(handle, (uint8_t[]){0x20, 0x02}, 2);
-
-    // 8. Set column address remap (left-right flip)
     ssd1306_write_cmd(handle, (uint8_t[]){0xA1}, 1);
-
-    // 9. Set row scan direction (up-down flip)
     ssd1306_write_cmd(handle, (uint8_t[]){0xC8}, 1);
-
-    // 10. Set COM pins configuration
     ssd1306_write_cmd(handle, (uint8_t[]){0xDA, 0x12}, 2);
-
-    // 11. Set contrast
     ssd1306_write_cmd(handle, (uint8_t[]){0x81, 0xCF}, 2);
-
-    // 12. Set pre-charge period
     ssd1306_write_cmd(handle, (uint8_t[]){0xD9, 0xF1}, 2);
-
-    // 13. Set VCOMH voltage
     ssd1306_write_cmd(handle, (uint8_t[]){0xDB, 0x40}, 2);
-
-    // 14. Set normal display (not full bright)
     ssd1306_write_cmd(handle, (uint8_t[]){0xA4, 0xA6}, 2);
-
-    // 15. Turn on display
     ssd1306_write_cmd(handle, (uint8_t[]){0xAF}, 1);
 }
-static void oled_init(void)
-{
+
+static void oled_init(void){
     DRIVER_SSD1306_LINK_INIT(&oled, ssd1306_handle_t);
 
     DRIVER_SSD1306_LINK_IIC_INIT(&oled, ssd1306_interface_iic_init);
@@ -346,9 +268,10 @@ static void oled_init(void)
     ssd1306_set_addr_pin(&oled, SSD1306_ADDR_SA0_0);
 
     ssd1306_init(&oled);
-	ssd1306_configure(&oled);
+    ssd1306_configure(&oled);
+    ssd1306_gram_update(&oled);
 }
-// Define 16x16 Chinese character font array, column-row mode, high bit first
+
 const uint8_t chinese_font[6][32] = {
     // Nan
     {0x04,0xe4,0x24,0x24,0x64,0xa4,0x24,0x3f,0x24,0xa4,0x64,0x24,0x24,0xe4,0x04,0x00,
@@ -370,19 +293,14 @@ const uint8_t chinese_font[6][32] = {
      0x04,0x04,0x04,0x04,0x04,0x44,0x84,0x7e,0x06,0x05,0x04,0x04,0x04,0x04,0x04,0x00}
 };
 
-// Function to draw a 16x16 Chinese character at (x, y)
-void draw_chinese_16x16(uint8_t x, uint8_t y, const uint8_t *font)
-{
-    if ((x + 15 > 127) || (y + 15 > 63)) return;   // boundary check
+void draw_chinese_16x16(uint8_t x, uint8_t y, const uint8_t *font){
+    if ((x + 15 > 127) || (y + 15 > 63)) return;
 
-    for (uint8_t i = 0; i < 16; i++)
-    {
-        uint8_t upper = font[i];        // upper half (y ~ y+7)
-        uint8_t lower = font[16 + i];   // lower half (y+8 ~ y+15)
+    for (uint8_t i = 0; i < 16; i++){
+        uint8_t upper = font[i];
+        uint8_t lower = font[16 + i];
 
-        for (uint8_t bit = 0; bit < 8; bit++)
-        {
-            // Note: using (1 << bit) so low bit corresponds to top
+        for (uint8_t bit = 0; bit < 8; bit++){
             if (upper & (1 << bit))
                 ssd1306_gram_write_point(&oled, x + i, y + bit, 1);
             if (lower & (1 << bit))
@@ -391,25 +309,91 @@ void draw_chinese_16x16(uint8_t x, uint8_t y, const uint8_t *font)
     }
 }
 
-// Function to display all content
-void display_oled_content(void)
-{
+void display_oled_content(void){
     ssd1306_clear(&oled);
-    
-    // Display the English line
+
     ssd1306_gram_write_string(&oled, 0, 0, "Hello NJUPT!", 12, 1, SSD1306_FONT_16);
-    
-    // Display Chinese characters (y=16)
+
     draw_chinese_16x16(0, 16, chinese_font[0]);
     draw_chinese_16x16(16, 16, chinese_font[1]);
     draw_chinese_16x16(32, 16, chinese_font[2]);
     draw_chinese_16x16(48, 16, chinese_font[3]);
     draw_chinese_16x16(64, 16, chinese_font[4]);
     draw_chinese_16x16(80, 16, chinese_font[5]);
-    
-    // Update the display
+
     ssd1306_gram_update(&oled);
 }
+
+static void display_breath(void){
+    ssd1306_clear(&oled);
+    ssd1306_gram_write_string(&oled, 0, 0, "Breath Mode", 11, 1, SSD1306_FONT_16);
+    ssd1306_gram_update(&oled);
+}
+
+static void display_rainbow(void){
+    ssd1306_clear(&oled);
+    ssd1306_gram_write_string(&oled, 0, 0, "Rainbow Mode", 12, 1, SSD1306_FONT_16);
+    ssd1306_gram_update(&oled);
+}
+
+static void ssd1306_clear_area(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
+    for (uint8_t i = 0; i < w; i++){
+        for (uint8_t j = 0; j < h; j++){
+            ssd1306_gram_write_point(&oled, x + i, y + j, 0);}}
+}
+static void display_measure_full(uint32_t brightness, uint32_t volt_100){
+    char line[24];
+
+    ssd1306_clear(&oled);
+
+    ssd1306_gram_write_string(&oled, 0, 0, "Measure Mode", 12, 1, SSD1306_FONT_16);
+
+    sprintf(line, "ADC: ");
+    ssd1306_gram_write_string(&oled, 0, 16, line, strlen(line), 1, SSD1306_FONT_16);
+
+    sprintf(line, "%u", (unsigned)brightness);
+    ssd1306_gram_write_string(&oled, 40, 16, line, strlen(line), 1, SSD1306_FONT_16);
+
+    sprintf(line, "V: ");
+    ssd1306_gram_write_string(&oled, 0, 32, line, strlen(line), 1, SSD1306_FONT_16);
+
+    sprintf(line, "%u.%02u", (unsigned)(volt_100 / 100), (unsigned)(volt_100 % 100));
+    ssd1306_gram_write_string(&oled, 40, 32, line, strlen(line), 1, SSD1306_FONT_16);
+
+    ssd1306_gram_update(&oled);
+}
+static void display_measure_value(uint32_t brightness, uint32_t volt_100){
+    char line[16];
+
+    // Clear ADC value area: height 16, width enough
+    ssd1306_clear_area(40, 16, 88, 16);
+
+    sprintf(line, "%u", (unsigned)brightness);
+    ssd1306_gram_write_string(&oled, 40, 16, line, strlen(line), 1, SSD1306_FONT_16);
+
+    // Clear voltage value area: height 16, width enough
+    ssd1306_clear_area(40, 32, 88, 16);
+
+    sprintf(line, "%u.%02u", (unsigned)(volt_100 / 100), (unsigned)(volt_100 % 100));
+    ssd1306_gram_write_string(&oled, 40, 32, line, strlen(line), 1, SSD1306_FONT_16);
+
+    ssd1306_gram_update(&oled);
+}
+static void Update_Display_By_Mode(void){
+    if (mode != displayed_mode){
+        displayed_mode = mode;
+
+        if (mode == mode_Breath){ display_breath();}
+        else if (mode == mode_Rainbow){ display_rainbow();}
+        else if (mode == mode_Measure){
+            uint32_t brightness = Potentiometer_Read();
+            uint32_t volt_100 = brightness * 330U / 4095U;
+            display_measure_full(brightness, volt_100);
+        }
+        else { display_oled_content();}
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -460,69 +444,70 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    Button_detector(Button_Switch_GPIO_Port, Button_Switch_Pin, &Button_Switch_Times);
+	  Button_detector(Button_Switch_GPIO_Port, Button_Switch_Pin, &Button_Switch_Times, Action_Switch);
 
-    if (state == state_Off)
-    {
-        if (state_Off_mode == state_Off_just)
-        {
-            RGB_lighted(0, 0, 0);
-            LED_lighted(LED_Off);
-            OLED_lighted(OLED_Off);
-            mode = mode_Off;
-            state_Off_mode = state_Off_already;
-        }
-        else
-        {
-            // Already turned off
-        }
-    }
-    else
-    {
-        Button_detector(Button_Breath_GPIO_Port, Button_Breath_Pin, &Button_Breath_Times);
-        Button_detector(Button_Rainbow_GPIO_Port, Button_Rainbow_Pin, &Button_Rainbow_Times);
-        Button_detector(Button_Measure_GPIO_Port, Button_Measure_Pin, &Button_Measure_Times);
+	  if (state == state_Off)
+	  {
+		  if (state_Off_mode == state_Off_just)
+		  {
+			  RGB_lighted(0,0,0);
+			  LED_lighted(LED_Off);
+			  OLED_lighted(OLED_Off);
+			  mode = mode_Off;
+			  state_Off_mode = state_Off_already;
+		  }
+		  else
+		  {
+			  // Already off
+		  }
+	  }
+	  else
+	  {
+		  Button_detector(Button_Breath_GPIO_Port, Button_Breath_Pin, &Button_Breath_Times, Action_Breath);
+		  Button_detector(Button_Rainbow_GPIO_Port, Button_Rainbow_Pin, &Button_Rainbow_Times, Action_Rainbow);
+		  Button_detector(Button_Measure_GPIO_Port, Button_Measure_Pin, &Button_Measure_Times, Action_Measure);
 
-        if (state_On_mode == state_On_just)
-        {
-            LED_lighted(LED_On);
-            OLED_lighted(OLED_On);
-            state_On_mode = state_On_already;
-        }
-        else
-        {
-            // Already turned on
-        }
+		  if (state_On_mode == state_On_just)
+		  {
+			  LED_lighted(LED_On);
+			  OLED_lighted(OLED_On);
+			  display_oled_content();
+			  displayed_mode = mode_Off;
+			  state_On_mode = state_On_already;
+		  }
+		  else
+		  {
+			  // Already on
+		  }
 
-        if (mode == mode_Breath){
-            RGB_Breath();}
-        else if (mode == mode_Rainbow){
-		RGB_Rainbow();}
-        else if (mode == mode_Measure)
-		{
-            uint32_t brightness = RGB_Measure();
-            if (n % 25 == 0)
-            {
-                uint32_t volt_100 = brightness * 330U / 4095U;
-                printf("ADC = %u, Voltage = %u.%02u V\r\n",
-                       brightness, volt_100 / 100, volt_100 % 100);
-            }
-        }
-        else
-        {
-            RGB_lighted(0, 0, 0);
-        }
-    }
+		  if (mode == mode_Breath){ 
+			  RGB_Breath();}
+		  else if (mode == mode_Rainbow){ 
+			  RGB_Rainbow();}
+		  else if (mode == mode_Measure)
+		  {
+		      uint32_t brightness = RGB_Measure();
+			  if (n % 25 == 0){
+				  uint32_t volt_100 = brightness * 330U / 4095U;
 
-    n = (n + 1) % 10000;
-    HAL_Delay(20);
+				  printf("ADC = %u, Voltage = %u.%02u V\r\n",
+					     brightness, volt_100 / 100, volt_100 % 100);
+
+				  display_measure_value(brightness, volt_100);
+			  }
+		  }
+		  else { RGB_lighted(0,0,0); }
+		  Update_Display_By_Mode();
+	  }
+	  
+	  n = (n + 1) % 10000;
+	  HAL_Delay(20);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
