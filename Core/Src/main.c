@@ -95,6 +95,12 @@ typedef enum {
 } mode_type;
 
 typedef enum {
+	Button_First_Pressed = 0,
+	Button_Next_Pressed = 1,
+	Button_Then_Pressed = 2
+} Button_Pressed_Times_type;
+
+typedef enum {
 	LED_On = 0,
 	LED_Off = 1,
 } LED_On_or_Off_type;
@@ -107,6 +113,10 @@ state_type state = state_Off;
 state_Off_type state_Off_mode = state_Off_already;
 state_On_type state_On_mode = state_On_already;
 mode_type mode = mode_Off;
+Button_Pressed_Times_type Button_Switch_Times = Button_First_Pressed;
+Button_Pressed_Times_type Button_Breath_Times = Button_First_Pressed;
+Button_Pressed_Times_type Button_Rainbow_Times = Button_First_Pressed;
+Button_Pressed_Times_type Button_Measure_Times = Button_First_Pressed;
 
 static uint32_t triangle (uint32_t phase, uint32_t period, uint32_t max)
 {
@@ -160,38 +170,53 @@ static void Boot_animation (void)
 		HAL_Delay(12);
 		n1 = n1 + 1;}
 }
-static void Button_detector (GPIO_TypeDef *port, uint16_t pin)
+static void Button_detector(GPIO_TypeDef *port, uint16_t pin, Button_Pressed_Times_type *times)
 {
-	if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
-	{
-		HAL_Delay(20);
-		if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
-		{
-			while (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
-			{
-				// Wait for Releasing
-			}
-			if (pin == Button_Switch_Pin)
-			{
-				if (state == state_Off){
-					state = state_On;
-					state_On_mode = state_On_just;}
-				else {
-					state = state_Off;
-					state_Off_mode = state_Off_just;}
-			}
-			else if (pin == Button_Breath_Pin){
-				mode = mode_Breath;}
-			else if (pin == Button_Rainbow_Pin){
-				mode = mode_Rainbow;}
-			else if (pin == Button_Measure_Pin){
-				mode = mode_Measure;}
-		}
-	}
-}
-		
+    if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
+    {
+        if (*times == Button_First_Pressed)
+        {
+            *times = Button_Next_Pressed;
+        }
+        else if (*times == Button_Next_Pressed)
+        {
+            if (pin == Button_Switch_Pin)
+            {
+                if (state == state_Off)
+                {
+                    state = state_On;
+                    state_On_mode = state_On_just;
+                }
+                else
+                {
+                    state = state_Off;
+                    state_Off_mode = state_Off_just;
+                }
+            }
+            else if (pin == Button_Breath_Pin){
+                mode = mode_Breath;}
+            else if (pin == Button_Rainbow_Pin){
+                mode = mode_Rainbow;}
+            else if (pin == Button_Measure_Pin){
+                mode = mode_Measure;}
 
-	
+            *times = Button_Then_Pressed;
+        }
+        else
+        {
+            // Button_Then_Pressed: waiting for release
+        }
+    }
+    else
+    {
+        if (*times == Button_Then_Pressed){
+            *times = Button_First_Pressed;}
+        else if (*times == Button_Next_Pressed){
+            // Released during debounce, treat as invalid press
+            *times = Button_First_Pressed;}
+    }
+}
+
 static void RGB_Breath (void)
 {
 	r = triangle (n, 75, 999);
@@ -322,7 +347,6 @@ static void oled_init(void)
 
     ssd1306_init(&oled);
 	ssd1306_configure(&oled);
-	ssd1306_gram_update(&oled);
 }
 // Define 16x16 Chinese character font array, column-row mode, high bit first
 const uint8_t chinese_font[6][32] = {
@@ -436,53 +460,62 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  Button_detector (Button_Switch_GPIO_Port, Button_Switch_Pin);	
-	  Button_detector (Button_Breath_GPIO_Port, Button_Breath_Pin);
-	  Button_detector (Button_Rainbow_GPIO_Port, Button_Rainbow_Pin);
-	  Button_detector (Button_Measure_GPIO_Port,Button_Measure_Pin);
-  
-	  if (state == state_Off)
-	  {
-		  if (state_Off_mode == state_Off_just)
-		  {
-			  RGB_lighted (0,0,0);
-			  LED_lighted (LED_Off);
-			  OLED_lighted (OLED_Off);
-			  mode = mode_Off;
-			  state_Off_mode = state_Off_already;
-		  }
-		  else
-		  {
-			  // It has already been turned off; no need to close it again.
-		  }
-	  }
-	  else
-	  {
-		  if (state_On_mode == state_On_just)
-		  {
-			  LED_lighted (LED_On);
-			  OLED_lighted (OLED_On);
-			  state_On_mode = state_On_already;
-		  }
-		  else
-		  {
-			  //They have already been turned off; no need to close them again.
-		  }
-		  if (mode == mode_Breath){
-			  RGB_Breath();}
-		  else if (mode == mode_Rainbow){
-			  RGB_Rainbow();}
-		  else if (mode == mode_Measure){
-			  uint32_t brightness = RGB_Measure();
-			  if (n % 25 == 0){				  
-				  uint32_t volt_100 = brightness * 330U / 4095U;
-				  printf("ADC = %u, Voltage = %u.%02u V\r\n", 
-						 brightness, volt_100 / 100, volt_100 %100);}}
-		  else {
-			  RGB_lighted(0,0,0);}
-	  }
-	  n = (n + 1) % 10000;
-	  HAL_Delay(20);
+    Button_detector(Button_Switch_GPIO_Port, Button_Switch_Pin, &Button_Switch_Times);
+
+    if (state == state_Off)
+    {
+        if (state_Off_mode == state_Off_just)
+        {
+            RGB_lighted(0, 0, 0);
+            LED_lighted(LED_Off);
+            OLED_lighted(OLED_Off);
+            mode = mode_Off;
+            state_Off_mode = state_Off_already;
+        }
+        else
+        {
+            // Already turned off
+        }
+    }
+    else
+    {
+        Button_detector(Button_Breath_GPIO_Port, Button_Breath_Pin, &Button_Breath_Times);
+        Button_detector(Button_Rainbow_GPIO_Port, Button_Rainbow_Pin, &Button_Rainbow_Times);
+        Button_detector(Button_Measure_GPIO_Port, Button_Measure_Pin, &Button_Measure_Times);
+
+        if (state_On_mode == state_On_just)
+        {
+            LED_lighted(LED_On);
+            OLED_lighted(OLED_On);
+            state_On_mode = state_On_already;
+        }
+        else
+        {
+            // Already turned on
+        }
+
+        if (mode == mode_Breath){
+            RGB_Breath();}
+        else if (mode == mode_Rainbow){
+		RGB_Rainbow();}
+        else if (mode == mode_Measure)
+		{
+            uint32_t brightness = RGB_Measure();
+            if (n % 25 == 0)
+            {
+                uint32_t volt_100 = brightness * 330U / 4095U;
+                printf("ADC = %u, Voltage = %u.%02u V\r\n",
+                       brightness, volt_100 / 100, volt_100 % 100);
+            }
+        }
+        else
+        {
+            RGB_lighted(0, 0, 0);
+        }
+    }
+
+    n = (n + 1) % 10000;
+    HAL_Delay(20);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
