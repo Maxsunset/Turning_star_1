@@ -341,7 +341,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;D:\STM32\SSD1306_Driver\src;D:\STM32\SSD1306_Driver\interface</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include;../../SSD1306_Driver/interface;../../SSD1306_Driver/src</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -666,12 +666,12 @@
             <File>
               <FileName>driver_ssd1306.c</FileName>
               <FileType>1</FileType>
-              <FilePath>D:\STM32\SSD1306_Driver\src\driver_ssd1306.c</FilePath>
+              <FilePath>..\..\SSD1306_Driver\src\driver_ssd1306.c</FilePath>
             </File>
             <File>
               <FileName>driver_ssd1306_interface.c</FileName>
               <FileType>1</FileType>
-              <FilePath>D:\STM32\SSD1306_Driver\interface\driver_ssd1306_interface.c</FilePath>
+              <FilePath>..\..\SSD1306_Driver\interface\driver_ssd1306_interface.c</FilePath>
             </File>
           </Files>
         </Group>
