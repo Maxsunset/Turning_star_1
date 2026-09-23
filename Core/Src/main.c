@@ -29,49 +29,6 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
-TIM_HandleTypeDef htim2;
-
-UART_HandleTypeDef huart1;
-
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
-
-/* Private function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_TIM2_Init(void);
-static void MX_ADC1_Init(void);
-static void MX_USART1_UART_Init(void);
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-uint32_t n = 0;
-uint32_t r = 0;
-uint32_t g = 0;
-uint32_t b = 0;
-static ssd1306_handle_t oled;
-
 typedef enum {
 	state_Off = 0,
 	state_On = 1
@@ -99,9 +56,6 @@ typedef enum {
 	Button_Next_Pressed = 1,
 	Button_Then_Pressed = 2
 } Button_Pressed_Times_type;
-
-typedef void (*Button_Action)(void);
-
 typedef enum {
 	LED_On = 0,
 	LED_Off = 1,
@@ -112,166 +66,31 @@ typedef enum {
 	OLED_Off = 1,
 } OLED_On_or_Off_type;
 
-state_type state = state_Off;
-state_Off_type state_Off_mode = state_Off_already;
-state_On_type state_On_mode = state_On_already;
-mode_type mode = mode_Off;
-mode_type displayed_mode = mode_Off;
+typedef void (*Button_Action)(void);
+/* USER CODE END PTD */
 
-Button_Pressed_Times_type Button_Switch_Times  = Button_First_Pressed;
-Button_Pressed_Times_type Button_Breath_Times  = Button_First_Pressed;
-Button_Pressed_Times_type Button_Rainbow_Times = Button_First_Pressed;
-Button_Pressed_Times_type Button_Measure_Times = Button_First_Pressed;
+/* Private define ------------------------------------------------------------*/
+/* USER CODE BEGIN PD */
 
-static uint32_t triangle(uint32_t phase, uint32_t period, uint32_t max){
-	uint32_t half = period / 2;
-	uint32_t t = phase % period;
+/* USER CODE END PD */
 
-	if(t < half){ return (t * max) / half;}
-	else { return ((period - t) * max) / half;}
-}
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
 
-static void LED_lighted(LED_On_or_Off_type LED_On_or_Off){
-	if (LED_On_or_Off == LED_On){ HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_RESET);}
-	else { HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_SET);}
-}
+/* USER CODE END PM */
 
-static void OLED_lighted(OLED_On_or_Off_type OLED_On_or_Off){
-	if (OLED_On_or_Off == OLED_On){ ssd1306_set_display(&oled, SSD1306_DISPLAY_ON);}
-	else { ssd1306_set_display(&oled, SSD1306_DISPLAY_OFF);}
-}
+/* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
 
-static void RGB_lighted(uint32_t color_r, uint32_t color_g, uint32_t color_b){
-	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, color_r);
-	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, color_g);
-	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, color_b);
-}
+TIM_HandleTypeDef htim2;
 
-static void Boot_animation(void){
-	static uint32_t n1 = 0;
-	while(1){
-		if( n1 / 25 == 0 ){ RGB_lighted(500,0,0);}
-		else if( n1 / 25 == 1 ){ RGB_lighted(500-20*(n1-25),20*(n1-25),0);}
-		else if( n1 / 25 == 2 ){ RGB_lighted(0, 500, 0);}
-		else if( n1 / 25 == 3 ){ RGB_lighted(0,500-20*(n1-75),20*(n1-75));}
-		else if( n1 / 25 == 4 ){ RGB_lighted(0,0,500);}
-		else { break;}
-		HAL_Delay(12);
-		n1 = n1 + 1;}
-}
+UART_HandleTypeDef huart1;
 
-static void Action_Switch(void){
-	if (state == state_Off){ state = state_On; state_On_mode = state_On_just;}
-	else { state = state_Off; state_Off_mode = state_Off_just;}
-}
-
-static void Action_Breath(void){ mode = mode_Breath;}
-static void Action_Rainbow(void){ mode = mode_Rainbow;}
-static void Action_Measure(void){ mode = mode_Measure;}
-
-static void Button_detector(GPIO_TypeDef *port, uint16_t pin,
-                            Button_Pressed_Times_type *times, Button_Action action){
-	if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET){
-		if (*times == Button_First_Pressed){ *times = Button_Next_Pressed;}
-		else if (*times == Button_Next_Pressed){
-			if (action != NULL){ action();}
-			*times = Button_Then_Pressed;}
-		else { /* Waiting for release */ }
-	}
-	else {
-		if (*times == Button_Then_Pressed){ *times = Button_First_Pressed;}
-		else if (*times == Button_Next_Pressed){ *times = Button_First_Pressed;}
-	}
-}
-
-static void RGB_Breath(void){
-	r = triangle(n, 75, 999);
-	g = 0;
-	b = triangle(n, 75, 999);
-	RGB_lighted(r, g, b);
-}
-
-static void RGB_Rainbow(void){
-	r = triangle(n, 50, 999);
-	g = triangle(n + 70, 75, 999);
-	b = triangle(n + 150, 100, 999);
-	RGB_lighted(r, g, b);
-}
-
-static uint32_t Potentiometer_Read(void){
-	static uint32_t adc_val = 0;
-
-	HAL_ADC_Start(&hadc1);
-	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK){
-		adc_val = HAL_ADC_GetValue(&hadc1);}
-	HAL_ADC_Stop(&hadc1);
-
-	return adc_val;
-}
-
-static uint32_t RGB_Measure(void){
-	uint32_t Brightness = Potentiometer_Read();
-	if (Brightness <= 2013){
-		r = 999 - (Brightness * 999 / 2013);
-		g = Brightness * 999 / 2013;
-		b = 0;}
-	else {
-		r = 0;
-		g = 999 - ((Brightness - 2013) * 999 / 2013);
-		b = (Brightness - 2013) * 999 / 2013;}
-	RGB_lighted(r, g, b);
-	return Brightness;
-}
-
-int fputc(int ch, FILE *f){
-	uint8_t temp = (uint8_t)ch;
-	HAL_UART_Transmit(&huart1, &temp, 1, 100);
-	return ch;
-}
-static void ssd1306_configure(ssd1306_handle_t *handle){
-    ssd1306_write_cmd(handle, (uint8_t[]){0xAE}, 1);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xD5, 0x80}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xA8, 0x3F}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xD3, 0x00}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0x40}, 1);
-    ssd1306_write_cmd(handle, (uint8_t[]){0x8D, 0x14}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0x20, 0x02}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xA1}, 1);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xC8}, 1);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xDA, 0x12}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0x81, 0xCF}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xD9, 0xF1}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xDB, 0x40}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xA4, 0xA6}, 2);
-    ssd1306_write_cmd(handle, (uint8_t[]){0xAF}, 1);
-}
-
-static void oled_init(void){
-    DRIVER_SSD1306_LINK_INIT(&oled, ssd1306_handle_t);
-
-    DRIVER_SSD1306_LINK_IIC_INIT(&oled, ssd1306_interface_iic_init);
-    DRIVER_SSD1306_LINK_IIC_DEINIT(&oled, ssd1306_interface_iic_deinit);
-    DRIVER_SSD1306_LINK_IIC_WRITE(&oled, ssd1306_interface_iic_write);
-    DRIVER_SSD1306_LINK_DELAY_MS(&oled, ssd1306_interface_delay_ms);
-    DRIVER_SSD1306_LINK_DEBUG_PRINT(&oled, ssd1306_interface_debug_print);
-    DRIVER_SSD1306_LINK_SPI_INIT(&oled, ssd1306_interface_spi_init);
-    DRIVER_SSD1306_LINK_SPI_DEINIT(&oled, ssd1306_interface_spi_deinit);
-    DRIVER_SSD1306_LINK_SPI_WRITE_COMMAND(&oled, ssd1306_interface_spi_write_cmd);
-    DRIVER_SSD1306_LINK_SPI_COMMAND_DATA_GPIO_INIT(&oled, ssd1306_interface_spi_cmd_data_gpio_init);
-    DRIVER_SSD1306_LINK_SPI_COMMAND_DATA_GPIO_DEINIT(&oled, ssd1306_interface_spi_cmd_data_gpio_deinit);
-    DRIVER_SSD1306_LINK_SPI_COMMAND_DATA_GPIO_WRITE(&oled, ssd1306_interface_spi_cmd_data_gpio_write);
-    DRIVER_SSD1306_LINK_RESET_GPIO_INIT(&oled, ssd1306_interface_reset_gpio_init);
-    DRIVER_SSD1306_LINK_RESET_GPIO_DEINIT(&oled, ssd1306_interface_reset_gpio_deinit);
-    DRIVER_SSD1306_LINK_RESET_GPIO_WRITE(&oled, ssd1306_interface_reset_gpio_write);
-
-    ssd1306_set_interface(&oled, SSD1306_INTERFACE_IIC);
-    ssd1306_set_addr_pin(&oled, SSD1306_ADDR_SA0_0);
-
-    ssd1306_init(&oled);
-    ssd1306_configure(&oled);
-    ssd1306_gram_update(&oled);
-}
-
+/* USER CODE BEGIN PV */
+uint32_t n = 0;
+uint32_t r = 0;
+uint32_t g = 0;
+uint32_t b = 0;
 const uint8_t chinese_font[6][32] = {
     // Nan
     {0x04,0xe4,0x24,0x24,0x64,0xa4,0x24,0x3f,0x24,0xa4,0x64,0x24,0x24,0xe4,0x04,0x00,
@@ -293,7 +112,172 @@ const uint8_t chinese_font[6][32] = {
      0x04,0x04,0x04,0x04,0x04,0x44,0x84,0x7e,0x06,0x05,0x04,0x04,0x04,0x04,0x04,0x00}
 };
 
-void draw_chinese_16x16(uint8_t x, uint8_t y, const uint8_t *font){
+static ssd1306_handle_t oled;
+
+state_type state = state_Off;
+state_Off_type state_Off_mode = state_Off_already;
+state_On_type state_On_mode = state_On_already;
+mode_type mode = mode_Off;
+mode_type displayed_mode = mode_Off;
+Button_Pressed_Times_type Button_Switch_Times  = Button_First_Pressed;
+Button_Pressed_Times_type Button_Breath_Times  = Button_First_Pressed;
+Button_Pressed_Times_type Button_Rainbow_Times = Button_First_Pressed;
+Button_Pressed_Times_type Button_Measure_Times = Button_First_Pressed;
+/* USER CODE END PV */
+
+/* Private function prototypes -----------------------------------------------*/
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_ADC1_Init(void);
+static void MX_USART1_UART_Init(void);
+/* USER CODE BEGIN PFP */
+static void ssd1306_configure(ssd1306_handle_t *handle);
+static void oled_init(void);
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+static uint32_t triangle(uint32_t phase, uint32_t period, uint32_t max)
+{
+	uint32_t half = period / 2;
+	uint32_t t = phase % period;
+
+	if(t < half){
+		return (t * max) / half;}
+	else {
+return ((period - t) * max) / half;}
+}
+
+static void LED_lighted(LED_On_or_Off_type LED_On_or_Off)
+{
+	if (LED_On_or_Off == LED_On){
+		HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_RESET);}
+	else {
+		HAL_GPIO_WritePin(On_Board_LED_GPIO_Port, On_Board_LED_Pin, GPIO_PIN_SET);}
+}
+
+static void OLED_lighted(OLED_On_or_Off_type OLED_On_or_Off)
+{
+	if (OLED_On_or_Off == OLED_On){
+		ssd1306_set_display(&oled, SSD1306_DISPLAY_ON);}
+	else {
+		ssd1306_set_display(&oled, SSD1306_DISPLAY_OFF);}
+}
+
+static void RGB_lighted(uint32_t color_r, uint32_t color_g, uint32_t color_b)
+{
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_2, color_r);
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_3, color_g);
+	__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_4, color_b);
+}
+
+static void Boot_animation(void)
+{
+	static uint32_t n1 = 0;
+	while(1){
+		if( n1 / 25 == 0 ){ RGB_lighted(500,0,0);}
+		else if( n1 / 25 == 1 ){ RGB_lighted(500-20*(n1-25),20*(n1-25),0);}
+		else if( n1 / 25 == 2 ){ RGB_lighted(0, 500, 0);}
+		else if( n1 / 25 == 3 ){ RGB_lighted(0,500-20*(n1-75),20*(n1-75));}
+		else if( n1 / 25 == 4 ){ RGB_lighted(0,0,500);}
+		else { break;}
+		HAL_Delay(12);
+		n1 = n1 + 1;}
+}
+
+static void Action_Switch(void)
+{
+	if (state == state_Off){
+		state = state_On;
+		state_On_mode = state_On_just;}
+	else 
+		{ state = state_Off;
+		state_Off_mode = state_Off_just;}
+}
+
+static void Action_Breath(void)
+{
+	mode = mode_Breath;}
+static void Action_Rainbow(void)
+{
+	mode = mode_Rainbow;}
+static void Action_Measure(void)
+{
+	mode = mode_Measure;}
+static void Button_detector(GPIO_TypeDef *port, uint16_t pin, Button_Pressed_Times_type *times, Button_Action action)
+{
+	if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
+	{
+		if (*times == Button_First_Pressed){ 
+			*times = Button_Next_Pressed;}
+		else if (*times == Button_Next_Pressed){
+			if (action != NULL){ 
+				action();}
+			*times = Button_Then_Pressed;}
+		else {
+			/* Waiting for release */ }
+	}
+	else {
+		if (*times == Button_Then_Pressed){
+			*times = Button_First_Pressed;}
+		else if (*times == Button_Next_Pressed){
+			*times = Button_First_Pressed;}
+	}
+}
+
+static void RGB_Breath(void)
+{
+	r = triangle(n, 75, 999);
+	g = 0;
+	b = triangle(n, 75, 999);
+	RGB_lighted(r, g, b);
+}
+
+static void RGB_Rainbow(void)
+{
+	r = triangle(n, 50, 999);
+	g = triangle(n + 70, 75, 999);
+	b = triangle(n + 150, 100, 999);
+	RGB_lighted(r, g, b);
+}
+
+static uint32_t Potentiometer_Read(void)
+{
+	static uint32_t adc_val = 0;
+
+	HAL_ADC_Start(&hadc1);
+	if (HAL_ADC_PollForConversion(&hadc1, 10) == HAL_OK){
+		adc_val = HAL_ADC_GetValue(&hadc1);}
+	HAL_ADC_Stop(&hadc1);
+
+	return adc_val;
+}
+
+static uint32_t RGB_Measure(void)
+{
+	uint32_t Brightness = Potentiometer_Read();
+	if (Brightness <= 2013){
+		r = 999 - (Brightness * 999 / 2013);
+		g = Brightness * 999 / 2013;
+		b = 0;}
+	else {
+		r = 0;
+		g = 999 - ((Brightness - 2013) * 999 / 2013);
+		b = (Brightness - 2013) * 999 / 2013;}
+	RGB_lighted(r, g, b);
+	return Brightness;
+}
+
+int fputc(int ch, FILE *f)
+{
+	uint8_t temp = (uint8_t)ch;
+	HAL_UART_Transmit(&huart1, &temp, 1, 100);
+	return ch;
+}
+static void draw_chinese_16x16(uint8_t x, uint8_t y, const uint8_t *font)
+{
     if ((x + 15 > 127) || (y + 15 > 63)) return;
 
     for (uint8_t i = 0; i < 16; i++){
@@ -309,7 +293,8 @@ void draw_chinese_16x16(uint8_t x, uint8_t y, const uint8_t *font){
     }
 }
 
-void display_oled_content(void){
+static void display_oled_content(void)
+{
     ssd1306_clear(&oled);
 
     ssd1306_gram_write_string(&oled, 0, 0, "Hello NJUPT!", 12, 1, SSD1306_FONT_16);
@@ -324,24 +309,28 @@ void display_oled_content(void){
     ssd1306_gram_update(&oled);
 }
 
-static void display_breath(void){
+static void display_breath(void)
+{
     ssd1306_clear(&oled);
     ssd1306_gram_write_string(&oled, 0, 0, "Breath Mode", 11, 1, SSD1306_FONT_16);
     ssd1306_gram_update(&oled);
 }
 
-static void display_rainbow(void){
+static void display_rainbow(void)
+{
     ssd1306_clear(&oled);
     ssd1306_gram_write_string(&oled, 0, 0, "Rainbow Mode", 12, 1, SSD1306_FONT_16);
     ssd1306_gram_update(&oled);
 }
 
-static void ssd1306_clear_area(uint8_t x, uint8_t y, uint8_t w, uint8_t h){
+static void ssd1306_clear_area(uint8_t x, uint8_t y, uint8_t w, uint8_t h)
+{
     for (uint8_t i = 0; i < w; i++){
         for (uint8_t j = 0; j < h; j++){
             ssd1306_gram_write_point(&oled, x + i, y + j, 0);}}
 }
-static void display_measure_full(uint32_t brightness, uint32_t volt_100){
+static void display_measure_full(uint32_t brightness, uint32_t volt_100)
+{
     char line[24];
 
     ssd1306_clear(&oled);
@@ -362,7 +351,8 @@ static void display_measure_full(uint32_t brightness, uint32_t volt_100){
 
     ssd1306_gram_update(&oled);
 }
-static void display_measure_value(uint32_t brightness, uint32_t volt_100){
+static void display_measure_value(uint32_t brightness, uint32_t volt_100)
+{
     char line[16];
 
     // Clear ADC value area: height 16, width enough
@@ -379,18 +369,21 @@ static void display_measure_value(uint32_t brightness, uint32_t volt_100){
 
     ssd1306_gram_update(&oled);
 }
-static void Update_Display_By_Mode(void){
+static void Update_Display_By_Mode(void)
+{
     if (mode != displayed_mode){
         displayed_mode = mode;
-
-        if (mode == mode_Breath){ display_breath();}
-        else if (mode == mode_Rainbow){ display_rainbow();}
+        if (mode == mode_Breath){
+			display_breath();}
+        else if (mode == mode_Rainbow){
+			display_rainbow();}
         else if (mode == mode_Measure){
             uint32_t brightness = Potentiometer_Read();
             uint32_t volt_100 = brightness * 330U / 4095U;
             display_measure_full(brightness, volt_100);
         }
-        else { display_oled_content();}
+        else
+			{ display_oled_content();}
     }
 }
 
@@ -508,6 +501,7 @@ int main(void)
   }
   /* USER CODE END 3 */
 }
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -741,6 +735,51 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void ssd1306_configure(ssd1306_handle_t *handle)
+{
+    ssd1306_write_cmd(handle, (uint8_t[]){0xAE}, 1);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xD5, 0x80}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xA8, 0x3F}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xD3, 0x00}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0x40}, 1);
+    ssd1306_write_cmd(handle, (uint8_t[]){0x8D, 0x14}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0x20, 0x02}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xA1}, 1);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xC8}, 1);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xDA, 0x12}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0x81, 0xCF}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xD9, 0xF1}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xDB, 0x40}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xA4, 0xA6}, 2);
+    ssd1306_write_cmd(handle, (uint8_t[]){0xAF}, 1);
+}
+
+static void oled_init(void)
+{
+    DRIVER_SSD1306_LINK_INIT(&oled, ssd1306_handle_t);
+
+    DRIVER_SSD1306_LINK_IIC_INIT(&oled, ssd1306_interface_iic_init);
+    DRIVER_SSD1306_LINK_IIC_DEINIT(&oled, ssd1306_interface_iic_deinit);
+    DRIVER_SSD1306_LINK_IIC_WRITE(&oled, ssd1306_interface_iic_write);
+    DRIVER_SSD1306_LINK_DELAY_MS(&oled, ssd1306_interface_delay_ms);
+    DRIVER_SSD1306_LINK_DEBUG_PRINT(&oled, ssd1306_interface_debug_print);
+    DRIVER_SSD1306_LINK_SPI_INIT(&oled, ssd1306_interface_spi_init);
+    DRIVER_SSD1306_LINK_SPI_DEINIT(&oled, ssd1306_interface_spi_deinit);
+    DRIVER_SSD1306_LINK_SPI_WRITE_COMMAND(&oled, ssd1306_interface_spi_write_cmd);
+    DRIVER_SSD1306_LINK_SPI_COMMAND_DATA_GPIO_INIT(&oled, ssd1306_interface_spi_cmd_data_gpio_init);
+    DRIVER_SSD1306_LINK_SPI_COMMAND_DATA_GPIO_DEINIT(&oled, ssd1306_interface_spi_cmd_data_gpio_deinit);
+    DRIVER_SSD1306_LINK_SPI_COMMAND_DATA_GPIO_WRITE(&oled, ssd1306_interface_spi_cmd_data_gpio_write);
+    DRIVER_SSD1306_LINK_RESET_GPIO_INIT(&oled, ssd1306_interface_reset_gpio_init);
+    DRIVER_SSD1306_LINK_RESET_GPIO_DEINIT(&oled, ssd1306_interface_reset_gpio_deinit);
+    DRIVER_SSD1306_LINK_RESET_GPIO_WRITE(&oled, ssd1306_interface_reset_gpio_write);
+
+    ssd1306_set_interface(&oled, SSD1306_INTERFACE_IIC);
+    ssd1306_set_addr_pin(&oled, SSD1306_ADDR_SA0_0);
+
+    ssd1306_init(&oled);
+    ssd1306_configure(&oled);
+    ssd1306_gram_update(&oled);
+}
 
 /* USER CODE END 4 */
 
